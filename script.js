@@ -159,6 +159,23 @@ class VideoDownloader {
             }
 
             const videoInfo = await infoResponse.json();
+            this.updateProgress(50, 'Fetching playable video stream...');
+
+            // Get the playable stream URL
+            const streamResponse = await fetch(`${API_BASE_URL}/api/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+
+            let streamUrl = null;
+            if (streamResponse.ok) {
+                const streamData = await streamResponse.json();
+                streamUrl = streamData.url;
+            } else {
+                console.warn('Could not get stream URL, video preview may not work');
+            }
+
             this.updateProgress(75, 'Processing video information...');
 
             // Create video data object
@@ -167,7 +184,8 @@ class VideoDownloader {
                 duration: videoInfo.duration,
                 platform: videoInfo.platform,
                 videoUrl: url,
-                isEmbed: true,
+                streamUrl: streamUrl,
+                isEmbed: !streamUrl,
                 thumbnail: videoInfo.thumbnail,
                 uploader: videoInfo.uploader,
                 description: videoInfo.description
@@ -490,27 +508,51 @@ class VideoDownloader {
     displayVideo(videoData) {
         this.currentVideoData = videoData;
 
-        // Hide the video player for embedded content
-        this.videoPlayer.style.display = 'none';
-        
-        // Create a message for embedded content
         const container = this.videoPlayer.parentElement;
         const existingNotice = container.querySelector('.embed-notice');
         if (existingNotice) {
             existingNotice.remove();
         }
-        
-        const notice = document.createElement('div');
-        notice.className = 'embed-notice';
-        
-        notice.innerHTML = `
-            <p>📱 Video loaded from <strong>${videoData.platform}</strong></p>
-            <p>Click <strong>"Download Video"</strong> to download this video</p>
-            <p style="margin-top: 15px; color: #999; font-size: 0.9em;">
-                Video will be downloaded using your server backend
-            </p>
-        `;
-        container.appendChild(notice);
+
+        // If we have a stream URL, display the video player
+        if (videoData.streamUrl) {
+            this.videoPlayer.style.display = 'block';
+            this.videoSource.src = videoData.streamUrl;
+            this.videoPlayer.load();
+            
+            // Handle video player errors gracefully
+            this.videoPlayer.addEventListener('error', () => {
+                console.warn('Video player error, trying fallback...');
+                this.videoPlayer.style.display = 'none';
+                const notice = document.createElement('div');
+                notice.className = 'embed-notice';
+                notice.innerHTML = `
+                    <p>📱 Video loaded from <strong>${videoData.platform}</strong></p>
+                    <p>Playback format not supported in browser.</p>
+                    <p>Click <strong>"Download Video"</strong> to download this video</p>
+                    <p style="margin-top: 15px; color: #999; font-size: 0.9em;">
+                        Video will be downloaded as MP4
+                    </p>
+                `;
+                if (!container.querySelector('.embed-notice')) {
+                    container.appendChild(notice);
+                }
+            }, { once: true });
+        } else {
+            // Otherwise show embed notice
+            this.videoPlayer.style.display = 'none';
+            const notice = document.createElement('div');
+            notice.className = 'embed-notice';
+            notice.innerHTML = `
+                <p>📱 Video loaded from <strong>${videoData.platform}</strong></p>
+                <p>Direct playback not available for this platform.</p>
+                <p>Click <strong>"Download Video"</strong> to download this video</p>
+                <p style="margin-top: 15px; color: #999; font-size: 0.9em;">
+                    Video will be downloaded using your server backend
+                </p>
+            `;
+            container.appendChild(notice);
+        }
 
         // Display metadata
         document.getElementById('videoTitle').textContent = videoData.title;

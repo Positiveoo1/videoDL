@@ -83,6 +83,54 @@ app.post('/api/info', async (req, res) => {
     }
 });
 
+// Get playable video URL (stream URL)
+app.post('/api/stream', async (req, res) => {
+    try {
+        const { url } = req.body;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        // Use yt-dlp to get the best video stream URL
+        const command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings "${url}" 2>&1`;
+        
+        await new Promise((resolve) => {
+            exec(command, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error('Stream URL fetch error:', error.message);
+                    return res.status(400).json({ 
+                        error: 'Unable to get video stream',
+                        details: stderr || error.message
+                    });
+                }
+
+                try {
+                    const streamUrl = stdout.trim();
+                    if (!streamUrl) {
+                        throw new Error('No stream URL found');
+                    }
+                    
+                    res.json({
+                        url: streamUrl,
+                        status: 'success'
+                    });
+                } catch (parseError) {
+                    res.status(400).json({ 
+                        error: 'Invalid stream data received',
+                        details: parseError.message
+                    });
+                }
+                resolve();
+            });
+        });
+
+    } catch (error) {
+        console.error('Server error:', error);
+        res.status(500).json({ error: 'Server error: ' + error.message });
+    }
+});
+
 app.post('/api/download', async (req, res) => {
     try {
         const { url, title } = req.body;
