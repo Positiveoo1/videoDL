@@ -213,7 +213,8 @@ class VideoDownloader {
     extractYouTubeID(url) {
         const patterns = [
             /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
-            /youtube\.com\/embed\/([^&\n?#]+)/
+            /youtube\.com\/embed\/([^&\n?#]+)/,
+            /youtube\.com\/shorts\/([^&\n?#]+)/  // YouTube Shorts
         ];
 
         for (let pattern of patterns) {
