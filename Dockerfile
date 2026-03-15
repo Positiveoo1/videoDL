@@ -19,7 +19,7 @@ FROM base AS build
 # Install packages needed to build node modules and yt-dlp
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3 python3 python3-pip && \
-    pip3 install yt-dlp
+    pip3 install --break-system-packages yt-dlp
 
 # Install node modules
 COPY package-lock.json package.json ./
@@ -35,7 +35,7 @@ FROM base
 # Install yt-dlp and Python runtime in final stage
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y python3 python3-pip && \
-    pip3 install yt-dlp && \
+    pip3 install --break-system-packages yt-dlp && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
