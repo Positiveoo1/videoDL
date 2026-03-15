@@ -100,8 +100,8 @@ app.get('/api/check-setup', (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🎥 Video Downloader Server Running`);
-    console.log(`📍 Open: http://localhost:${PORT}`);
+    console.log(`📍 Open: http://0.0.0.0:${PORT}`);
     console.log(`\n✨ Features: YouTube, Instagram, Facebook, TikTok, Twitter, and 1000+ more platforms\n`);
 });
