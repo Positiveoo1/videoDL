@@ -160,6 +160,10 @@ class VideoDownloader {
                 videoData = await this.getFacebookVideo(url);
             } else if (platform === 'vimeo') {
                 videoData = await this.getVimeoVideo(url);
+            } else if (platform === 'reddit') {
+                videoData = await this.getRedditVideo(url);
+            } else if (platform === 'dailymotion') {
+                videoData = await this.getDailymotionVideo(url);
             } else {
                 videoData = await this.getGenericVideo(url);
             }
@@ -210,10 +214,34 @@ class VideoDownloader {
                 message: 'The Instagram video may be private or from a restricted account'
             };
         }
+        if (errorMessage.includes('Reddit')) {
+            return {
+                title: 'Reddit Error',
+                message: 'The Reddit video may be private or restricted. Use the Download button to process it with the server'
+            };
+        }
+        if (errorMessage.includes('Dailymotion')) {
+            return {
+                title: 'Dailymotion Error',
+                message: 'The Dailymotion video may be private or restricted. Use the Download button to process it with the server'
+            };
+        }
+        if (errorMessage.includes('Twitter')) {
+            return {
+                title: 'Twitter/X Error',
+                message: 'The Twitter/X video may be private or restricted. Use the Download button to process it'
+            };
+        }
         if (errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')) {
             return {
                 title: 'Connection Timeout',
                 message: 'The video took too long to process. Try again or use a shorter video'
+            };
+        }
+        if (errorMessage.includes('CORS') || errorMessage.includes('blocked by CORS') || errorMessage.includes('Failed to fetch')) {
+            return {
+                title: 'Network Access Issue',
+                message: 'The platform blocks direct browser requests. Click "Download Video" to use the server backend to process this video'
             };
         }
         if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
@@ -237,6 +265,7 @@ class VideoDownloader {
         if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
         if (url.includes('vimeo.com')) return 'vimeo';
         if (url.includes('reddit.com')) return 'reddit';
+        if (url.includes('dailymotion.com') || url.includes('dai.ly')) return 'dailymotion';
         return 'generic';
     }
 
@@ -267,10 +296,22 @@ class VideoDownloader {
 
     async getTikTokVideo(url) {
         try {
-            // Using TikTok oEmbed or scraping
+            // Try using TikTok oEmbed endpoint
             const response = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                // Fall back to basic info if endpoint is blocked
+                return {
+                    title: 'TikTok Video',
+                    videoUrl: url,
+                    platform: 'TikTok',
+                    isEmbed: true
+                };
+            }
+            
             const data = await response.json();
-
             return {
                 title: data.title || 'TikTok Video',
                 videoUrl: url,
@@ -278,16 +319,21 @@ class VideoDownloader {
                 isEmbed: true
             };
         } catch (error) {
-            throw new Error('TikTok: ' + error.message);
+            // If oEmbed fails, return basic data for backend processing
+            return {
+                title: 'TikTok Video',
+                videoUrl: url,
+                platform: 'TikTok',
+                isEmbed: true
+            };
         }
     }
 
     async getInstagramVideo(url) {
         try {
             // Instagram doesn't allow direct CORS requests
-            // Using a proxy approach
+            // Just return the URL for backend processing
             const igUrl = url.includes('?') ? url.split('?')[0] : url;
-            const jsonUrl = igUrl.endsWith('/') ? igUrl + 'oembed/?url=' + encodeURIComponent(igUrl) : igUrl + '/?__a=1';
             
             return {
                 title: 'Instagram Video',
@@ -302,18 +348,37 @@ class VideoDownloader {
 
     async getTwitterVideo(url) {
         try {
-            // Twitter/X oEmbed
+            // Twitter/X oEmbed endpoint
             const response = await fetch(`https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}`);
+            
+            // Check if response is valid JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                // If not JSON, the endpoint may be blocked or rate-limited
+                // Fall back to basic data
+                return {
+                    title: 'Twitter/X Video',
+                    videoUrl: url,
+                    platform: 'Twitter/X',
+                    isEmbed: true
+                };
+            }
+            
             const data = await response.json();
-
             return {
-                title: 'Twitter Video',
+                title: data.title || 'Twitter/X Video',
                 videoUrl: url,
                 platform: 'Twitter/X',
                 isEmbed: true
             };
         } catch (error) {
-            throw new Error('Twitter: ' + error.message);
+            // If oEmbed fails, still return the URL for backend processing
+            return {
+                title: 'Twitter/X Video',
+                videoUrl: url,
+                platform: 'Twitter/X',
+                isEmbed: true
+            };
         }
     }
 
@@ -345,6 +410,43 @@ class VideoDownloader {
             };
         } catch (error) {
             throw new Error('Vimeo: ' + error.message);
+        }
+    }
+
+    async getRedditVideo(url) {
+        try {
+            // Extract video ID from Reddit URL
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/').filter(p => p);
+            const postId = pathParts[pathParts.length - 2];
+            const title = pathParts[pathParts.length - 1] || 'Reddit Video';
+            
+            return {
+                title: title.replace(/-/g, ' '),
+                videoUrl: url,
+                platform: 'Reddit',
+                isEmbed: true
+            };
+        } catch (error) {
+            throw new Error('Reddit: ' + error.message);
+        }
+    }
+
+    async getDailymotionVideo(url) {
+        try {
+            // Extract video ID from Dailymotion URL
+            const videoIdMatch = url.match(/(?:\/video\/|dai\.ly\/)([a-z0-9]+)/i);
+            const videoId = videoIdMatch ? videoIdMatch[1] : 'video';
+            
+            return {
+                title: 'Dailymotion Video',
+                videoUrl: url,
+                videoId: videoId,
+                platform: 'Dailymotion',
+                isEmbed: true
+            };
+        } catch (error) {
+            throw new Error('Dailymotion: ' + error.message);
         }
     }
 
