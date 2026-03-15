@@ -144,45 +144,41 @@ class VideoDownloader {
         this.updateProgress(10, 'Analyzing video...');
 
         try {
-            const platform = this.detectPlatform(url);
-            this.updateProgress(25, `Fetching ${platform} video...`);
-            let videoData = null;
+            this.updateProgress(25, 'Fetching video information...');
+            
+            // Call backend to get video metadata using yt-dlp
+            const infoResponse = await fetch(`${API_BASE_URL}/api/info`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
 
-            if (platform === 'youtube') {
-                videoData = await this.getYouTubeVideo(url);
-            } else if (platform === 'tiktok') {
-                videoData = await this.getTikTokVideo(url);
-            } else if (platform === 'instagram') {
-                videoData = await this.getInstagramVideo(url);
-            } else if (platform === 'twitter') {
-                videoData = await this.getTwitterVideo(url);
-            } else if (platform === 'facebook') {
-                videoData = await this.getFacebookVideo(url);
-            } else if (platform === 'vimeo') {
-                videoData = await this.getVimeoVideo(url);
-            } else if (platform === 'reddit') {
-                videoData = await this.getRedditVideo(url);
-            } else if (platform === 'dailymotion') {
-                videoData = await this.getDailymotionVideo(url);
-            } else {
-                videoData = await this.getGenericVideo(url);
+            if (!infoResponse.ok) {
+                const errorData = await infoResponse.json();
+                throw new Error(errorData.error || 'Failed to fetch video info');
             }
 
+            const videoInfo = await infoResponse.json();
             this.updateProgress(75, 'Processing video information...');
 
-            if (videoData) {
-                this.updateProgress(90, 'Preparing video player...');
-                this.displayVideo(videoData);
-                this.addToHistory(videoData);
-                this.updateProgress(100, 'Ready to download!');
-                setTimeout(() => this.showProgress(false), 500);
-            } else {
-                this.showProgress(false);
-                this.showError(
-                    'Could not retrieve video',
-                    'Make sure the URL is valid, public, and the video is available'
-                );
-            }
+            // Create video data object
+            const videoData = {
+                title: videoInfo.title,
+                duration: videoInfo.duration,
+                platform: videoInfo.platform,
+                videoUrl: url,
+                isEmbed: true,
+                thumbnail: videoInfo.thumbnail,
+                uploader: videoInfo.uploader,
+                description: videoInfo.description
+            };
+
+            this.updateProgress(90, 'Preparing video player...');
+            this.displayVideo(videoData);
+            this.addToHistory(videoData);
+            this.updateProgress(100, 'Ready to download!');
+            setTimeout(() => this.showProgress(false), 500);
+
         } catch (error) {
             this.showProgress(false);
             console.error('Error:', error);
@@ -196,10 +192,16 @@ class VideoDownloader {
     getErrorDetails(error) {
         const errorMessage = error.message || 'Unable to download video';
         
+        if (errorMessage.includes('fetch video information') || errorMessage.includes('Unable to fetch')) {
+            return {
+                title: 'Video Not Found or Unavailable',
+                message: 'The video URL may be invalid, private, deleted, or not supported. Make sure it\'s a valid URL and the video is publicly available.'
+            };
+        }
         if (errorMessage.includes('YouTube')) {
             return {
                 title: 'YouTube Error',
-                message: 'The YouTube URL may be private, restricted, or the video may not exist'
+                message: 'The YouTube video may be private, restricted, age-gated, or the channel may be unavailable'
             };
         }
         if (errorMessage.includes('TikTok')) {
@@ -217,19 +219,19 @@ class VideoDownloader {
         if (errorMessage.includes('Reddit')) {
             return {
                 title: 'Reddit Error',
-                message: 'The Reddit video may be private or restricted. Use the Download button to process it with the server'
+                message: 'The Reddit video may be private or restricted'
             };
         }
         if (errorMessage.includes('Dailymotion')) {
             return {
                 title: 'Dailymotion Error',
-                message: 'The Dailymotion video may be private or restricted. Use the Download button to process it with the server'
+                message: 'The Dailymotion video may be private or restricted'
             };
         }
-        if (errorMessage.includes('Twitter')) {
+        if (errorMessage.includes('Twitter') || errorMessage.includes('X')) {
             return {
                 title: 'Twitter/X Error',
-                message: 'The Twitter/X video may be private or restricted. Use the Download button to process it'
+                message: 'The video may be private, deleted, or from a restricted account'
             };
         }
         if (errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')) {
@@ -241,7 +243,7 @@ class VideoDownloader {
         if (errorMessage.includes('CORS') || errorMessage.includes('blocked by CORS') || errorMessage.includes('Failed to fetch')) {
             return {
                 title: 'Network Access Issue',
-                message: 'The platform blocks direct browser requests. Click "Download Video" to use the server backend to process this video'
+                message: 'There was a network error. Please check your internet connection and try again'
             };
         }
         if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
@@ -252,7 +254,7 @@ class VideoDownloader {
         }
         
         return {
-            title: 'Download Failed',
+            title: 'Error',
             message: errorMessage.replace(/^Error: /, '')
         };
     }
@@ -488,45 +490,39 @@ class VideoDownloader {
     displayVideo(videoData) {
         this.currentVideoData = videoData;
 
-        if (videoData.isEmbed) {
-            // For embedded videos, we'll show an iframe or message
-            this.videoPlayer.style.display = 'none';
-            
-            // Create a message for embedded content
-            const container = this.videoPlayer.parentElement;
-            if (!container.querySelector('.embed-notice')) {
-                const notice = document.createElement('div');
-                notice.className = 'embed-notice';
-                notice.innerHTML = `
-                    <p>📱 This is an embedded video from ${videoData.platform}.</p>
-                    <p>Click the download button to get a link to the original video.</p>
-                    <p style="margin-top: 15px; color: #999; font-size: 0.9em;">
-                        Note: Direct downloads from ${videoData.platform} may be restricted by platform policies.
-                    </p>
-                `;
-                container.appendChild(notice);
-            }
-        } else {
-            // For direct video links
-            this.videoPlayer.style.display = 'block';
-            this.videoSource.src = videoData.videoUrl;
-            this.videoPlayer.load();
+        // Hide the video player for embedded content
+        this.videoPlayer.style.display = 'none';
+        
+        // Create a message for embedded content
+        const container = this.videoPlayer.parentElement;
+        const existingNotice = container.querySelector('.embed-notice');
+        if (existingNotice) {
+            existingNotice.remove();
         }
+        
+        const notice = document.createElement('div');
+        notice.className = 'embed-notice';
+        
+        notice.innerHTML = `
+            <p>📱 Video loaded from <strong>${videoData.platform}</strong></p>
+            <p>Click <strong>"Download Video"</strong> to download this video</p>
+            <p style="margin-top: 15px; color: #999; font-size: 0.9em;">
+                Video will be downloaded using your server backend
+            </p>
+        `;
+        container.appendChild(notice);
 
+        // Display metadata
         document.getElementById('videoTitle').textContent = videoData.title;
         document.getElementById('videoPlatform').textContent = videoData.platform;
-        document.getElementById('videoDuration').textContent = 'Fetching...';
-
-        if (!videoData.isEmbed) {
-            this.videoPlayer.addEventListener('loadedmetadata', () => {
-                const duration = this.formatDuration(this.videoPlayer.duration);
-                document.getElementById('videoDuration').textContent = duration;
-            }, { once: true });
-        }
+        
+        // Format duration
+        const duration = this.formatDuration(videoData.duration);
+        document.getElementById('videoDuration').textContent = duration;
 
         this.resultSection.style.display = 'block';
         this.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        this.announceToScreenReader(`Video loaded: ${videoData.title} from ${videoData.platform}`);
+        this.announceToScreenReader(`Video loaded: ${videoData.title} (${duration}) from ${videoData.platform}`);
     }
 
     async downloadVideo() {
@@ -562,7 +558,7 @@ class VideoDownloader {
                 },
                 body: JSON.stringify({
                     url: this.videoUrl.value,
-                    title: this.currentVideoData.title
+                    title: this.currentVideoData.title || 'video'
                 })
             });
 
@@ -589,7 +585,7 @@ class VideoDownloader {
             this.updateProgress(100, 'Download complete!');
             setTimeout(() => this.showProgress(false), 1000);
             
-            this.showError('✅ Download Successful!', '', 'success');
+            this.showError('✅ Download Successful!', `Successfully downloaded: ${this.currentVideoData.title}`, 'success');
             this.announceToScreenReader('Video downloaded successfully');
             setTimeout(() => this.hideError(), 3000);
         } catch (error) {

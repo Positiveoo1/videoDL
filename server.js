@@ -30,7 +30,58 @@ setInterval(() => {
             }
         });
     });
-}, 600000); 
+}, 600000);
+
+// Get video metadata without downloading
+app.post('/api/info', async (req, res) => {
+    try {
+        const { url } = req.body;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        // Use yt-dlp to extract video metadata as JSON
+        const command = `yt-dlp -j --no-warnings "${url}" 2>&1`;
+        
+        await new Promise((resolve) => {
+            exec(command, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error('Info fetch error:', error.message);
+                    return res.status(400).json({ 
+                        error: 'Unable to fetch video information',
+                        details: stderr || error.message
+                    });
+                }
+
+                try {
+                    const data = JSON.parse(stdout);
+                    
+                    res.json({
+                        title: data.title || 'Video',
+                        duration: data.duration || 0,
+                        platform: data.extractor || 'Unknown',
+                        thumbnail: data.thumbnail || null,
+                        description: data.description || '',
+                        uploader: data.uploader || 'Unknown',
+                        upload_date: data.upload_date || null,
+                        view_count: data.view_count || 0
+                    });
+                } catch (parseError) {
+                    res.status(400).json({ 
+                        error: 'Invalid video data received',
+                        details: parseError.message
+                    });
+                }
+                resolve();
+            });
+        });
+
+    } catch (error) {
+        console.error('Server error:', error);
+        res.status(500).json({ error: 'Server error: ' + error.message });
+    }
+});
 
 app.post('/api/download', async (req, res) => {
     try {
