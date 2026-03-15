@@ -7,35 +7,90 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Screen reader announcements -->
+    <div id="liveRegion" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="progressRegion" class="sr-only" role="status" aria-live="polite"></div>
+
     <div class="container">
         <header>
-            <h1>Video Downloader</h1>
-            <p>Download videos from YouTube, Instagram, Facebook, TikTok & More</p>
+            <div class="header-top">
+                <div>
+                    <h1>Video Downloader</h1>
+                    <p>Download videos from YouTube, Instagram, Facebook, TikTok & More</p>
+                </div>
+                <button 
+                    id="darkModeToggle" 
+                    class="theme-toggle" 
+                    aria-label="Toggle dark mode"
+                    title="Toggle dark mode (shortcut: Ctrl+Shift+D)"
+                >
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
         </header>
 
         <main>
             <div class="input-section">
-                <input 
-                    type="url" 
-                    id="videoUrl" 
-                    placeholder="Paste your video link here (YouTube, Instagram, Facebook, TikTok...)"
-                    class="url-input"
+                <div class="input-wrapper">
+                    <input 
+                        type="url" 
+                        id="videoUrl" 
+                        placeholder="Paste your video link here (YouTube, Instagram, Facebook, TikTok...)"
+                        class="url-input"
+                        aria-label="Video URL input"
+                        autocomplete="off"
+                    >
+                    <button 
+                        id="pasteBtn" 
+                        class="paste-btn" 
+                        aria-label="Paste from clipboard"
+                        title="Paste from clipboard"
+                    >
+                        📋
+                    </button>
+                </div>
+                <button 
+                    id="downloadBtn" 
+                    class="download-btn"
+                    aria-label="Download video"
                 >
-                <button id="downloadBtn" class="download-btn">
                     <span>Get Video</span>
                 </button>
             </div>
 
-            <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+            <!-- Progress Bar -->
+            <div id="progressContainer" class="progress-container" style="display: none;">
+                <div class="progress-header">
+                    <span class="progress-label">Downloading...</span>
+                    <span class="progress-percent" id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <p id="progressStatus" class="progress-status">Initializing download...</p>
+            </div>
+
+            <div id="loadingSpinner" class="loading-spinner" style="display: none;" role="status" aria-live="polite">
                 <div class="spinner"></div>
                 <p>Processing your video...</p>
             </div>
 
-            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="errorMessage" class="error-message" style="display: none;" role="alert" aria-live="assertive">
+                <span class="error-icon">⚠️</span>
+                <div class="error-content">
+                    <p id="errorText"></p>
+                    <p id="errorDetails" class="error-details"></p>
+                </div>
+                <button class="error-close" aria-label="Close error message" onclick="document.getElementById('errorMessage').style.display = 'none';">×</button>
+            </div>
 
             <div id="resultSection" class="result-section" style="display: none;">
                 <div class="video-container">
-                    <video id="videoPlayer" controls>
+                    <video 
+                        id="videoPlayer" 
+                        controls
+                        aria-label="Video player"
+                    >
                         <source id="videoSource" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
@@ -49,10 +104,18 @@
                     </div>
 
                     <div class="download-section">
-                        <button id="downloadVideoBtn" class="download-btn-primary">
+                        <button 
+                            id="downloadVideoBtn" 
+                            class="download-btn-primary"
+                            aria-label="Download video"
+                        >
                             Download Video
                         </button>
-                        <button id="copyLinkBtn" class="copy-btn">
+                        <button 
+                            id="copyLinkBtn" 
+                            class="copy-btn"
+                            aria-label="Copy video link to clipboard"
+                        >
                             Copy Link
                         </button>
                     </div>
@@ -98,10 +161,28 @@
                     <li>Respecting creators' copyright is important</li>
                 </ul>
             </div>
+
+            <!-- Recent Downloads History -->
+            <div class="history-section" id="historySection" style="display: none;">
+                <div class="history-header">
+                    <h3>Recent Downloads</h3>
+                    <button 
+                        id="clearHistoryBtn" 
+                        class="clear-history-btn"
+                        aria-label="Clear download history"
+                    >
+                        Clear History
+                    </button>
+                </div>
+                <div id="historyList" class="history-list"></div>
+            </div>
         </main>
 
         <footer>
             <p>&copy; 2024 Video Downloader | Use Responsibly</p>
+            <p class="keyboard-shortcuts-hint" title="Keyboard shortcuts: Enter = Download, Ctrl+Shift+D = Toggle dark mode, Escape = Close">
+                💡 Press <kbd>Enter</kbd> to download, <kbd>Ctrl+Shift+D</kbd> for dark mode
+            </p>
         </footer>
     </div>
 
