@@ -16,9 +16,10 @@ ENV NODE_ENV="production"
 # Throw-away build stage to reduce size of final image
 FROM base AS build
 
-# Install packages needed to build node modules
+# Install packages needed to build node modules and yt-dlp
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3 python3 python3-pip && \
+    pip3 install yt-dlp
 
 # Install node modules
 COPY package-lock.json package.json ./
@@ -31,9 +32,16 @@ COPY . .
 # Final stage for app image
 FROM base
 
+# Install yt-dlp and Python runtime in final stage
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y python3 python3-pip && \
+    pip3 install yt-dlp && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy built application
 COPY --from=build /app /app
 
 # Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
+EXPOSE 8080
 CMD [ "npm", "run", "start" ]
