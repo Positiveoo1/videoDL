@@ -46,32 +46,59 @@ app.post('/api/download', async (req, res) => {
         
         const outputPath = path.join(tempDir, `${sanitized}_%(id)s.%(ext)s`);
         
-        const command = `yt-dlp -f best -o "${outputPath}" "${url}" 2>&1`;
-
-        exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
-            if (error) {
-                console.error('Download error:', error);
-                return res.status(400).json({ 
-                    error: 'Failed to download video. Make sure url is valid and public.',
-                    details: stderr || error.message
-                });
-            }
-
-            const files = fs.readdirSync(tempDir);
-            const videoFile = files.find(f => f.includes(sanitized));
-
-            if (!videoFile) {
-                return res.status(400).json({ error: 'Video file not found after download' });
-            }
-
-            const filePath = path.join(tempDir, videoFile);
+        // Optimized format selection for faster downloads with good quality
+        // Tries multiple format options for compatibility with short videos
+        const formatOptions = [
+            'bestvideo[height<=720]+bestaudio/best[height<=720]', // Fast: 720p with audio
+            'best[height<=720]',                                     // Fallback: best 720p or lower
+            'best',                                                   // Last resort: absolute best
+        ];
+        
+        let lastError = null;
+        let downloaded = false;
+        
+        for (const format of formatOptions) {
+            if (downloaded) break;
             
-            res.download(filePath, `${sanitized}.mp4`, (err) => {
-                if (err) console.error('Download send error:', err);
-                setTimeout(() => {
-                    fs.unlink(filePath, () => {});
-                }, 5000);
+            const command = `yt-dlp -f "${format}" -N 4 --socket-timeout 30 -o "${outputPath}" "${url}" 2>&1`;
+            
+            // Retry logic wrapper
+            await new Promise((resolve) => {
+                exec(command, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(`Download error with format "${format}":`, error.message);
+                        lastError = stderr || error.message;
+                    } else {
+                        downloaded = true;
+                        lastError = null;
+                    }
+                    resolve();
+                });
             });
+        }
+        
+        if (!downloaded) {
+            console.error('All format attempts failed');
+            return res.status(400).json({ 
+                error: 'Failed to download video. This may be a very short video or restricted content.',
+                details: lastError
+            });
+        }
+
+        const files = fs.readdirSync(tempDir);
+        const videoFile = files.find(f => f.includes(sanitized));
+
+        if (!videoFile) {
+            return res.status(400).json({ error: 'Video file not found after download' });
+        }
+
+        const filePath = path.join(tempDir, videoFile);
+        
+        res.download(filePath, `${sanitized}.mp4`, (err) => {
+            if (err) console.error('Download send error:', err);
+            setTimeout(() => {
+                fs.unlink(filePath, () => {});
+            }, 5000);
         });
 
     } catch (error) {
