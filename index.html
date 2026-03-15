@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader - Download from All Platforms</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Video Downloader</h1>
+            <p>Download videos from YouTube, Instagram, Facebook, TikTok & More</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <input 
+                    type="url" 
+                    id="videoUrl" 
+                    placeholder="Paste your video link here (YouTube, Instagram, Facebook, TikTok...)"
+                    class="url-input"
+                >
+                <button id="downloadBtn" class="download-btn">
+                    <span>Get Video</span>
+                </button>
+            </div>
+
+            <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processing your video...</p>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+            <div id="resultSection" class="result-section" style="display: none;">
+                <div class="video-container">
+                    <video id="videoPlayer" controls>
+                        <source id="videoSource" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+
+                <div class="info-section">
+                    <div class="video-info">
+                        <p><strong>Title:</strong> <span id="videoTitle">-</span></p>
+                        <p><strong>Duration:</strong> <span id="videoDuration">-</span></p>
+                        <p><strong>Platform:</strong> <span id="videoPlatform">-</span></p>
+                    </div>
+
+                    <div class="download-section">
+                        <button id="downloadVideoBtn" class="download-btn-primary">
+                            Download Video
+                        </button>
+                        <button id="copyLinkBtn" class="copy-btn">
+                            Copy Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="features">
+                <h2>Supported Platforms</h2>
+                <div class="platforms-grid">
+                    <div class="platform-card">
+                        <span>YouTube</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Instagram</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Facebook</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>TikTok</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Twitter/X</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Reddit</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Vimeo</span>
+                    </div>
+                    <div class="platform-card">
+                        <span>Dailymotion</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <h3>Important Notes</h3>
+                <ul>
+                    <li>Paste the full video URL from the platform</li>
+                    <li>Make sure the video is publicly available</li>
+                    <li>Downloaded videos are for personal use only</li>
+                    <li>Respecting creators' copyright is important</li>
+                </ul>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Video Downloader | Use Responsibly</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
