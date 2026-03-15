@@ -41,23 +41,31 @@ app.post('/api/info', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        // Use yt-dlp to extract video metadata as JSON
-        const command = `yt-dlp -j --no-warnings "${url}" 2>&1`;
-        
-        await new Promise((resolve) => {
-            exec(command, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error('Info fetch error:', error.message);
-                    return res.status(400).json({ 
-                        error: 'Unable to fetch video information',
-                        details: stderr || error.message
-                    });
-                }
+        // Normalize Instagram URLs
+        let processUrl = url;
+        if (url.includes('instagram.com')) {
+            // Ensure Instagram URL ends with proper format
+            processUrl = url.replace(/\/$/, '') + '/';
+        }
 
+        // Use yt-dlp to extract video metadata as JSON with retry logic
+        const maxRetries = 2;
+        let lastError = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const command = `yt-dlp -j --no-warnings --socket-timeout 10 "${processUrl}" 2>&1`;
+            
+            const result = await new Promise((resolve) => {
+                exec(command, { timeout: 40000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                    resolve({ error, stdout, stderr });
+                });
+            });
+
+            if (!result.error && result.stdout) {
                 try {
-                    const data = JSON.parse(stdout);
+                    const data = JSON.parse(result.stdout);
                     
-                    res.json({
+                    return res.json({
                         title: data.title || 'Video',
                         duration: data.duration || 0,
                         platform: data.extractor || 'Unknown',
@@ -68,13 +76,31 @@ app.post('/api/info', async (req, res) => {
                         view_count: data.view_count || 0
                     });
                 } catch (parseError) {
-                    res.status(400).json({ 
-                        error: 'Invalid video data received',
-                        details: parseError.message
-                    });
+                    lastError = parseError.message;
                 }
-                resolve();
+            } else {
+                lastError = result.stderr || result.error?.message || 'Unknown error';
+            }
+
+            // Wait before retry
+            if (attempt < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+
+        console.error('All retry attempts failed. Last error:', lastError);
+        
+        // Provide more specific error messages
+        if (lastError.includes('Instagram') || lastError.includes('instagram')) {
+            return res.status(400).json({ 
+                error: 'Instagram Error',
+                details: 'The video may be private, deleted, or Instagram is blocking access. Try downloading instead.'
             });
+        }
+
+        return res.status(400).json({ 
+            error: 'Unable to fetch video information',
+            details: 'The video may be private, deleted, or the platform is blocking access. Try the Download button to process it.'
         });
 
     } catch (error) {
@@ -92,37 +118,47 @@ app.post('/api/stream', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        // Use yt-dlp to get the best video stream URL
-        const command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings "${url}" 2>&1`;
-        
-        await new Promise((resolve) => {
-            exec(command, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error('Stream URL fetch error:', error.message);
-                    return res.status(400).json({ 
-                        error: 'Unable to get video stream',
-                        details: stderr || error.message
-                    });
-                }
+        // Normalize Instagram URLs
+        let processUrl = url;
+        if (url.includes('instagram.com')) {
+            processUrl = url.replace(/\/$/, '') + '/';
+        }
 
-                try {
-                    const streamUrl = stdout.trim();
-                    if (!streamUrl) {
-                        throw new Error('No stream URL found');
-                    }
-                    
-                    res.json({
+        // Use yt-dlp to get the best video stream URL with retry logic
+        const maxRetries = 2;
+        let lastError = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 10 "${processUrl}" 2>&1`;
+            
+            const result = await new Promise((resolve) => {
+                exec(command, { timeout: 40000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                    resolve({ error, stdout, stderr });
+                });
+            });
+
+            if (!result.error && result.stdout) {
+                const streamUrl = result.stdout.trim();
+                if (streamUrl && !streamUrl.includes('ERROR')) {
+                    return res.json({
                         url: streamUrl,
                         status: 'success'
                     });
-                } catch (parseError) {
-                    res.status(400).json({ 
-                        error: 'Invalid stream data received',
-                        details: parseError.message
-                    });
                 }
-                resolve();
-            });
+            }
+
+            lastError = result.stderr || result.error?.message || 'Unknown error';
+
+            // Wait before retry
+            if (attempt < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+
+        console.error('Stream fetch failed:', lastError);
+        return res.status(400).json({ 
+            error: 'Unable to get video stream',
+            details: 'Stream URL could not be extracted. Video may be protected or platform is blocking access.'
         });
 
     } catch (error) {

@@ -153,49 +153,73 @@ class VideoDownloader {
                 body: JSON.stringify({ url })
             });
 
-            if (!infoResponse.ok) {
-                const errorData = await infoResponse.json();
-                throw new Error(errorData.error || 'Failed to fetch video info');
-            }
+            let videoInfo = null;
+            if (infoResponse.ok) {
+                videoInfo = await infoResponse.json();
+                this.updateProgress(50, 'Fetching playable video stream...');
 
-            const videoInfo = await infoResponse.json();
-            this.updateProgress(50, 'Fetching playable video stream...');
+                // Get the playable stream URL
+                const streamResponse = await fetch(`${API_BASE_URL}/api/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
 
-            // Get the playable stream URL
-            const streamResponse = await fetch(`${API_BASE_URL}/api/stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
-            });
+                let streamUrl = null;
+                if (streamResponse.ok) {
+                    const streamData = await streamResponse.json();
+                    streamUrl = streamData.url;
+                } else {
+                    console.warn('Could not get stream URL, video preview may not work');
+                }
 
-            let streamUrl = null;
-            if (streamResponse.ok) {
-                const streamData = await streamResponse.json();
-                streamUrl = streamData.url;
+                this.updateProgress(75, 'Processing video information...');
+
+                // Create video data object
+                const videoData = {
+                    title: videoInfo.title,
+                    duration: videoInfo.duration,
+                    platform: videoInfo.platform,
+                    videoUrl: url,
+                    streamUrl: streamUrl,
+                    isEmbed: !streamUrl,
+                    thumbnail: videoInfo.thumbnail,
+                    uploader: videoInfo.uploader,
+                    description: videoInfo.description
+                };
+
+                this.updateProgress(90, 'Preparing video player...');
+                this.displayVideo(videoData);
+                this.addToHistory(videoData);
+                this.updateProgress(100, 'Ready to download!');
+                setTimeout(() => this.showProgress(false), 500);
             } else {
-                console.warn('Could not get stream URL, video preview may not work');
+                // If info fetch fails, try to show a basic interface allowing download
+                const errorData = await infoResponse.json();
+                console.warn('Info fetch failed, attempting fallback:', errorData);
+                this.updateProgress(75, 'Attempting alternative method...');
+
+                // Create minimal video data for download
+                const videoData = {
+                    title: 'Video',
+                    duration: 0,
+                    platform: this.detectPlatform(url),
+                    videoUrl: url,
+                    streamUrl: null,
+                    isEmbed: true,
+                    thumbnail: null,
+                    uploader: 'Unknown'
+                };
+
+                this.updateProgress(90, 'Preparing for download...');
+                this.displayVideo(videoData);
+                this.addToHistory(videoData);
+                this.updateProgress(100, 'Ready to download via server!');
+                setTimeout(() => this.showProgress(false), 500);
+
+                this.showError('⚠️ Could not load preview', 'Video metadata not available, but you can still download it using the "Download Video" button', 'warning');
+                setTimeout(() => this.hideError(), 5000);
             }
-
-            this.updateProgress(75, 'Processing video information...');
-
-            // Create video data object
-            const videoData = {
-                title: videoInfo.title,
-                duration: videoInfo.duration,
-                platform: videoInfo.platform,
-                videoUrl: url,
-                streamUrl: streamUrl,
-                isEmbed: !streamUrl,
-                thumbnail: videoInfo.thumbnail,
-                uploader: videoInfo.uploader,
-                description: videoInfo.description
-            };
-
-            this.updateProgress(90, 'Preparing video player...');
-            this.displayVideo(videoData);
-            this.addToHistory(videoData);
-            this.updateProgress(100, 'Ready to download!');
-            setTimeout(() => this.showProgress(false), 500);
 
         } catch (error) {
             this.showProgress(false);
@@ -769,7 +793,13 @@ class VideoDownloader {
         errorDetails.textContent = details;
         
         this.errorMessage.style.display = 'block';
-        this.errorMessage.className = 'error-message ' + (type === 'success' ? 'success' : '');
+        this.errorMessage.className = 'error-message';
+        
+        if (type === 'success') {
+            this.errorMessage.classList.add('success');
+        } else if (type === 'warning') {
+            this.errorMessage.classList.add('warning');
+        }
     }
 
     hideError() {
@@ -806,6 +836,18 @@ style.textContent = `
         background: #2a3f2f;
         border-color: #5a8c5a;
         color: #90ee90;
+    }
+
+    .error-message.warning {
+        background: #fff3cd;
+        border-color: #ffc107;
+        color: #856404;
+    }
+
+    body.dark-mode .error-message.warning {
+        background: #3f3f2a;
+        border-color: #d4a574;
+        color: #ffd700;
     }
 `;
 document.head.appendChild(style);
