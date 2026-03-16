@@ -37,3 +37,9 @@ logs/
 # Build output
 dist/
 build/
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+.coverage

@@ -46,6 +46,13 @@ app.post('/api/info', async (req, res) => {
         if (url.includes('instagram.com')) {
             processUrl = url.replace(/\/$/, '') + '/';
         }
+        // YouTube Shorts: convert to standard URL format
+        if (url.includes('youtube.com/shorts/')) {
+            const videoId = url.match(/shorts\/([a-zA-Z0-9_-]{11})/)?.[1];
+            if (videoId) {
+                processUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            }
+        }
 
         // Use yt-dlp to extract video metadata as JSON with retry logic
         const maxRetries = 3;
@@ -54,8 +61,8 @@ app.post('/api/info', async (req, res) => {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             // Build command with YouTube-specific options if it's a YouTube URL
             let command = '';
-            if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                // YouTube requires special handling
+            if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('shorts')) {
+                // YouTube (including Shorts) requires special handling
                 command = `yt-dlp -j --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
             } else {
                 // Standard command for other platforms
@@ -130,6 +137,13 @@ app.post('/api/stream', async (req, res) => {
         if (url.includes('instagram.com')) {
             processUrl = url.replace(/\/$/, '') + '/';
         }
+        // YouTube Shorts: convert to standard URL format
+        if (url.includes('youtube.com/shorts/')) {
+            const videoId = url.match(/shorts\/([a-zA-Z0-9_-]{11})/)?.[1];
+            if (videoId) {
+                processUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            }
+        }
 
         // Use yt-dlp to get the best video stream URL with retry logic
         const maxRetries = 3;
@@ -137,7 +151,7 @@ app.post('/api/stream', async (req, res) => {
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             let command = '';
-            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+            if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('shorts')) {
                 // YouTube specific options
                 command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
             } else {
@@ -211,7 +225,7 @@ app.post('/api/download', async (req, res) => {
         let downloaded = false;
         
         // YouTube-specific initial check
-        const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+        const isYouTube = url.includes('youtube.com') || url.includes('youtu.be') || url.includes('shorts');
         let baseCommand = isYouTube 
             ? `yt-dlp --extractor-args youtube:player_client=web --no-check-certificate --socket-timeout 30`
             : `yt-dlp --socket-timeout 30`;
