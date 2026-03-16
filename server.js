@@ -41,22 +41,31 @@ app.post('/api/info', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        // Normalize Instagram URLs
+        // Normalize URLs
         let processUrl = url;
         if (url.includes('instagram.com')) {
-            // Ensure Instagram URL ends with proper format
             processUrl = url.replace(/\/$/, '') + '/';
         }
 
         // Use yt-dlp to extract video metadata as JSON with retry logic
-        const maxRetries = 2;
+        const maxRetries = 3;
         let lastError = null;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            const command = `yt-dlp -j --no-warnings --socket-timeout 10 "${processUrl}" 2>&1`;
+            // Build command with YouTube-specific options if it's a YouTube URL
+            let command = '';
+            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                // YouTube requires special handling
+                command = `yt-dlp -j --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
+            } else {
+                // Standard command for other platforms
+                command = `yt-dlp -j --no-warnings --socket-timeout 15 "${processUrl}" 2>&1`;
+            }
+            
+            console.log(`Attempt ${attempt + 1} for URL:`, url);
             
             const result = await new Promise((resolve) => {
-                exec(command, { timeout: 40000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                exec(command, { timeout: 60000, maxBuffer: 20 * 1024 * 1024 }, (error, stdout, stderr) => {
                     resolve({ error, stdout, stderr });
                 });
             });
@@ -64,6 +73,8 @@ app.post('/api/info', async (req, res) => {
             if (!result.error && result.stdout) {
                 try {
                     const data = JSON.parse(result.stdout);
+                    
+                    console.log('Successfully fetched metadata for:', data.title || 'Unknown Title');
                     
                     return res.json({
                         title: data.title || 'Video',
@@ -77,30 +88,25 @@ app.post('/api/info', async (req, res) => {
                     });
                 } catch (parseError) {
                     lastError = parseError.message;
+                    console.error('Parse error:', parseError.message);
                 }
             } else {
                 lastError = result.stderr || result.error?.message || 'Unknown error';
+                console.error('Attempt failed:', lastError);
             }
 
             // Wait before retry
             if (attempt < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
         }
 
         console.error('All retry attempts failed. Last error:', lastError);
         
-        // Provide more specific error messages
-        if (lastError.includes('Instagram') || lastError.includes('instagram')) {
-            return res.status(400).json({ 
-                error: 'Instagram Error',
-                details: 'The video may be private, deleted, or Instagram is blocking access. Try downloading instead.'
-            });
-        }
-
+        // Return error with full details for debugging
         return res.status(400).json({ 
             error: 'Unable to fetch video information',
-            details: 'The video may be private, deleted, or the platform is blocking access. Try the Download button to process it.'
+            details: lastError || 'The video may be private, deleted, or the platform is blocking access.'
         });
 
     } catch (error) {
@@ -108,6 +114,7 @@ app.post('/api/info', async (req, res) => {
         res.status(500).json({ error: 'Server error: ' + error.message });
     }
 });
+
 
 // Get playable video URL (stream URL)
 app.post('/api/stream', async (req, res) => {
@@ -125,14 +132,23 @@ app.post('/api/stream', async (req, res) => {
         }
 
         // Use yt-dlp to get the best video stream URL with retry logic
-        const maxRetries = 2;
+        const maxRetries = 3;
         let lastError = null;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            const command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 10 "${processUrl}" 2>&1`;
+            let command = '';
+            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                // YouTube specific options
+                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
+            } else {
+                // Standard command
+                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 "${processUrl}" 2>&1`;
+            }
+            
+            console.log(`Stream extraction attempt ${attempt + 1} for:`, url);
             
             const result = await new Promise((resolve) => {
-                exec(command, { timeout: 40000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+                exec(command, { timeout: 60000, maxBuffer: 20 * 1024 * 1024 }, (error, stdout, stderr) => {
                     resolve({ error, stdout, stderr });
                 });
             });
@@ -140,6 +156,7 @@ app.post('/api/stream', async (req, res) => {
             if (!result.error && result.stdout) {
                 const streamUrl = result.stdout.trim();
                 if (streamUrl && !streamUrl.includes('ERROR')) {
+                    console.log('Stream URL extracted successfully');
                     return res.json({
                         url: streamUrl,
                         status: 'success'
@@ -148,14 +165,15 @@ app.post('/api/stream', async (req, res) => {
             }
 
             lastError = result.stderr || result.error?.message || 'Unknown error';
+            console.error(`Attempt ${attempt + 1} failed:`, lastError);
 
             // Wait before retry
             if (attempt < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
         }
 
-        console.error('Stream fetch failed:', lastError);
+        console.error('Stream fetch failed after all attempts:', lastError);
         return res.status(400).json({ 
             error: 'Unable to get video stream',
             details: 'Stream URL could not be extracted. Video may be protected or platform is blocking access.'
@@ -192,10 +210,18 @@ app.post('/api/download', async (req, res) => {
         let lastError = null;
         let downloaded = false;
         
+        // YouTube-specific initial check
+        const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+        let baseCommand = isYouTube 
+            ? `yt-dlp --extractor-args youtube:player_client=web --no-check-certificate --socket-timeout 30`
+            : `yt-dlp --socket-timeout 30`;
+        
         for (const format of formatOptions) {
             if (downloaded) break;
             
-            const command = `yt-dlp -f "${format}" -N 4 --socket-timeout 30 -o "${outputPath}" "${url}" 2>&1`;
+            const command = `${baseCommand} -f "${format}" -N 4 -o "${outputPath}" "${url}" 2>&1`;
+            
+            console.log(`Attempting download with format: ${format}`);
             
             // Retry logic wrapper
             await new Promise((resolve) => {
@@ -206,6 +232,7 @@ app.post('/api/download', async (req, res) => {
                     } else {
                         downloaded = true;
                         lastError = null;
+                        console.log('Download successful');
                     }
                     resolve();
                 });
@@ -213,10 +240,10 @@ app.post('/api/download', async (req, res) => {
         }
         
         if (!downloaded) {
-            console.error('All format attempts failed');
+            console.error('All format attempts failed. Last error:', lastError);
             return res.status(400).json({ 
                 error: 'Failed to download video. This may be a very short video or restricted content.',
-                details: lastError
+                details: lastError || 'Unknown error'
             });
         }
 
