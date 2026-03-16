@@ -63,10 +63,10 @@ app.post('/api/info', async (req, res) => {
             let command = '';
             if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('shorts')) {
                 // YouTube (including Shorts) requires special handling
-                command = `yt-dlp -j --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
+                command = `yt-dlp -j --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}"`;
             } else {
                 // Standard command for other platforms
-                command = `yt-dlp -j --no-warnings --socket-timeout 15 "${processUrl}" 2>&1`;
+                command = `yt-dlp -j --no-warnings --socket-timeout 15 "${processUrl}"`;
             }
             
             console.log(`Attempt ${attempt + 1} for URL:`, url);
@@ -98,8 +98,10 @@ app.post('/api/info', async (req, res) => {
                     console.error('Parse error:', parseError.message);
                 }
             } else {
-                lastError = result.stderr || result.error?.message || 'Unknown error';
-                console.error('Attempt failed:', lastError);
+                // Priority: stderr > stdout > error message
+                const errorOutput = result.stderr || result.stdout || result.error?.message || 'Unknown error';
+                lastError = errorOutput;
+                console.error(`Attempt ${attempt + 1} failed - yt-dlp error:`, errorOutput);
             }
 
             // Wait before retry
@@ -153,10 +155,10 @@ app.post('/api/stream', async (req, res) => {
             let command = '';
             if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('shorts')) {
                 // YouTube specific options
-                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}" 2>&1`;
+                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 --extractor-args youtube:player_client=web --no-check-certificate "${processUrl}"`;
             } else {
                 // Standard command
-                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 "${processUrl}" 2>&1`;
+                command = `yt-dlp -f "best[ext=mp4]/best" -g --no-warnings --socket-timeout 15 "${processUrl}"`;
             }
             
             console.log(`Stream extraction attempt ${attempt + 1} for:`, url);
@@ -178,8 +180,9 @@ app.post('/api/stream', async (req, res) => {
                 }
             }
 
-            lastError = result.stderr || result.error?.message || 'Unknown error';
-            console.error(`Attempt ${attempt + 1} failed:`, lastError);
+            const errorOutput = result.stderr || result.stdout || result.error?.message || 'Unknown error';
+            lastError = errorOutput;
+            console.error(`Attempt ${attempt + 1} failed - yt-dlp error:`, errorOutput);
 
             // Wait before retry
             if (attempt < maxRetries - 1) {
@@ -233,7 +236,7 @@ app.post('/api/download', async (req, res) => {
         for (const format of formatOptions) {
             if (downloaded) break;
             
-            const command = `${baseCommand} -f "${format}" -N 4 -o "${outputPath}" "${url}" 2>&1`;
+            const command = `${baseCommand} -f "${format}" -N 4 -o "${outputPath}" "${url}"`;
             
             console.log(`Attempting download with format: ${format}`);
             
@@ -241,8 +244,9 @@ app.post('/api/download', async (req, res) => {
             await new Promise((resolve) => {
                 exec(command, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
                     if (error) {
-                        console.error(`Download error with format "${format}":`, error.message);
-                        lastError = stderr || error.message;
+                        const errorOutput = stderr || stdout || error.message;
+                        console.error(`Download error with format "${format}" - yt-dlp error:`, errorOutput);
+                        lastError = errorOutput;
                     } else {
                         downloaded = true;
                         lastError = null;
